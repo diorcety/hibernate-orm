@@ -41,6 +41,10 @@ import javax.lang.model.util.Elements;
 import javax.tools.Diagnostic;
 import javax.xml.validation.Schema;
 
+import org.hibernate.boot.registry.BootstrapServiceRegistryBuilder;
+import org.hibernate.internal.jaxb.cfg.JaxbHibernateConfiguration;
+import org.hibernate.internal.util.ValueHolder;
+import org.hibernate.jpa.AvailableSettings;
 import org.hibernate.jpamodelgen.Context;
 import org.hibernate.jpamodelgen.util.AccessType;
 import org.hibernate.jpamodelgen.util.AccessTypeInformation;
@@ -54,6 +58,7 @@ import org.hibernate.jpamodelgen.xml.jaxb.EntityMappings;
 import org.hibernate.jpamodelgen.xml.jaxb.Persistence;
 import org.hibernate.jpamodelgen.xml.jaxb.PersistenceUnitDefaults;
 import org.hibernate.jpamodelgen.xml.jaxb.PersistenceUnitMetadata;
+import org.hibernate.service.ConfigLoader;
 
 /**
  * Parser for JPA XML descriptors (persistence.xml and referenced mapping files).
@@ -70,6 +75,16 @@ public class JpaDescriptorParser {
 	private final Context context;
 	private final List<EntityMappings> entityMappings;
 	private final XmlParserHelper xmlParserHelper;
+
+	// see if the persistence.xml settings named a Hibernate config file....
+	final ValueHolder<ConfigLoader> configLoaderHolder = new ValueHolder<ConfigLoader>(
+			new ValueHolder.DeferredInitializer<ConfigLoader>() {
+				@Override
+				public ConfigLoader initialize() {
+					return new ConfigLoader( new BootstrapServiceRegistryBuilder().build() );
+				}
+			}
+	);
 
 	public JpaDescriptorParser(Context context) {
 		this.context = context;
@@ -110,6 +125,20 @@ public class JpaDescriptorParser {
 			List<Persistence.PersistenceUnit> persistenceUnits = persistence.getPersistenceUnit();
 			for ( Persistence.PersistenceUnit unit : persistenceUnits ) {
 				mappingFileNames.addAll( unit.getMappingFile() );
+				for(Persistence.PersistenceUnit.Properties.Property p:unit.getProperties().getProperty()) {
+					if(p.getName().equals(AvailableSettings.CFG_FILE)) {
+						JaxbHibernateConfiguration hibernateConfiguration = getHibernateConfiguration(p.getValue());
+						if(hibernateConfiguration != null && hibernateConfiguration.getSessionFactory() != null) {
+							for (JaxbHibernateConfiguration.JaxbSessionFactory.JaxbMapping jaxbMapping : hibernateConfiguration.getSessionFactory().getMapping()) {
+								if (jaxbMapping.getResource() != null) {
+									mappingFileNames.add(jaxbMapping.getResource());
+								} else if (jaxbMapping.getFile() != null) {
+									mappingFileNames.add(jaxbMapping.getFile());
+								}
+							}
+						}
+					}
+				}
 			}
 		}
 
@@ -120,6 +149,10 @@ public class JpaDescriptorParser {
 		// command line options
 		mappingFileNames.addAll( context.getOrmXmlFiles() );
 		return mappingFileNames;
+	}
+
+	private JaxbHibernateConfiguration getHibernateConfiguration(String file) {
+		return configLoaderHolder.getValue().loadConfigXmlResource(file);
 	}
 
 	private Persistence getPersistence() {

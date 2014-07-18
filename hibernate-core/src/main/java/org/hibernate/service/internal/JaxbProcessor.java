@@ -105,6 +105,7 @@ public class JaxbProcessor {
 	@SuppressWarnings( { "UnnecessaryLocalVariable" })
 	private XMLInputFactory buildStaxFactory() {
 		XMLInputFactory staxFactory = XMLInputFactory.newInstance();
+		staxFactory.setXMLResolver(new HibernateXMLResolver());
 		return staxFactory;
 	}
 

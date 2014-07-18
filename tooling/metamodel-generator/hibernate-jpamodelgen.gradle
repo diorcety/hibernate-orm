@@ -1,6 +1,7 @@
 apply plugin: 'version-injection'
 
 dependencies {
+	compile project( ':hibernate-entitymanager' )
 	testCompile libraries.junit
     testCompile libraries.jpa
     testCompile project( ':hibernate-core' ) 
